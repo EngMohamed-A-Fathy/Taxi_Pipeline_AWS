@@ -1,0 +1,36 @@
+# GreenRedshift
+
+import psycopg2
+
+def lambda_handler(event, context):
+    try:
+        # Connect to Redshift
+        conn = psycopg2.connect(
+            dbname='dev',
+            host='redshift-cluster-1.cvwq7xyxagyf.us-east-2.redshift.amazonaws.com',
+            port='5439',
+            user='awsuser2',
+            password='Casestudy*12'
+        )
+
+        # Execute the COPY command
+        cur = conn.cursor()
+        copy_command = """
+          COPY greendwh
+            FROM 's3://greendwh/green_data.csv'
+            IAM_ROLE 'arn:aws:iam::169574232393:role/RedshiftIAMrule'
+            FORMAT CSV
+            DATEFORMAT 'auto'
+            IGNOREHEADER 1
+        """
+        cur.execute(copy_command)
+
+        # Commit the changes and close the connections
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        print("COPY command executed successfully.")
+
+    except Exception as e:
+        print(f"Error: {str(e)}")
