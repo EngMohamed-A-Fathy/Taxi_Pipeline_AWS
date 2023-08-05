@@ -1,0 +1,49 @@
+# DailyGreenDWH
+import boto3
+import csv
+from datetime import datetime
+
+def extract_value(value):
+    data_type = list(value.keys())[0]
+    return value[data_type]
+
+def lambda_handler(event, context):
+    # Get the current date in the desired format
+    current_date = datetime.now().strftime('%d/%m/%Y')
+
+    # Initialize DynamoDB and S3 clients
+    dynamodb = boto3.client('dynamodb')
+    s3 = boto3.client('s3')
+
+    # Retrieve the records from DynamoDB based on the ingestion date filter
+    response = dynamodb.scan(
+        TableName='GreenTables',
+        FilterExpression='#date = :date_val',
+        ExpressionAttributeNames={'#date': 'Ingestion_Date'},
+        ExpressionAttributeValues={':date_val': {'S': current_date}}
+    )
+
+    # Extract the records and remove the {'S': ...} or {'N': ...} syntax
+    items = [{k: extract_value(v) for k, v in item.items()} for item in response['Items']]
+
+    # Define the S3 bucket and key where the file will be stored
+    s3_bucket = 'greendwh'
+    s3_key = f'green_data.csv'  # Example: green_data_15_07_2023.csv
+
+    # Order the fields in the desired order
+    new_order = ['ID', 'Vendor', 'date', 'RateCode', 'Payment', 'type_of_trip', 'Trip_Duration', 'passenger_count', 'trip_distance', 'fare_amount', 'extra', 'mta_tax', 'tip_amount', 'tolls_amount', 'improvement_surcharge', 'total_amount', 'congestion_surcharge', 'Ingestion_Date']
+    items_ordered = [{key: item[key] for key in new_order} for item in items]
+
+    # Write the records to the CSV file
+    with open('/tmp/green_data.csv', 'w', newline='') as file:
+        writer = csv.DictWriter(file, fieldnames=new_order)
+        writer.writeheader()
+        writer.writerows(items_ordered)
+
+    # Upload the file to S3
+    s3.upload_file('/tmp/green_data.csv', s3_bucket, s3_key)
+
+    return {
+        'statusCode': 200,
+        'body': f'Data copied to S3 file: s3://{s3_bucket}/{s3_key}'
+    }
